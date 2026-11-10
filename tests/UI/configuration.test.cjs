@@ -7,7 +7,7 @@ const source = path.resolve(__dirname, '../../src/Emby.AudioMemory');
 function setup(failLoad = false) {
     let Controller, saved, calls = 0;
     const elements = new Map();
-    const makeElement = () => ({value:'', checked:false, disabled:false, hidden:false, textContent:'', children:[], style:{}, addEventListener(){}, appendChild(child){this.children.push(child);}, querySelector:element});
+    const makeElement = () => ({value:'', checked:false, disabled:false, hidden:false, textContent:'', children:[], style:{}, setAttribute(){}, addEventListener(){}, appendChild(child){this.children.push(child);}, querySelector:element});
     const element = id => {
         if (!elements.has(id)) elements.set(id, makeElement());
         return elements.get(id);
@@ -15,7 +15,8 @@ function setup(failLoad = false) {
     const api = {
         getPluginConfiguration: async () => { if(failLoad) throw Error('load'); return {Enable:true, DebugLogging:false, AllowedUserIds:['test-user'], UnknownSetting:42}; },
         getUrl: x => x,
-        getJSON: async route => route === 'Users' ? [{Id:'test-user',Name:'Анна'},{Id:'second',Name:'Борис'}] : {Preferences:[], Error:null},
+        ajax: async () => ({}),
+        getJSON: async route => route === 'AudioMemory/Studios' ? [{Id:'hdrezka',Name:'HDRezka'},{Id:'tvshows',Name:'TVShows'}] : route === 'Users' ? [{Id:'test-user',Name:'Анна'},{Id:'second',Name:'Борис'}] : {Preferences:[], Error:null},
         updatePluginConfiguration: async (id, config) => {calls++; saved = config;}
     };
     vm.runInNewContext(fs.readFileSync(path.join(source, 'Configuration.js'),'utf8'), {
@@ -59,7 +60,7 @@ test('save error is visible and allows a retry', async () => {
     assert.equal(s.controller.button.disabled,false);
 });
 test('status error leaves successfully loaded settings usable', async () => {
-    const s=setup();const get=s.api.getJSON;s.api.getJSON=async route=>{if(route==='Users')return get(route);throw Error('status');};
+    const s=setup();const get=s.api.getJSON;s.api.getJSON=async route=>{if(route==='Users'||route==='AudioMemory/Studios')return get(route);throw Error('status');};
     await s.controller.onResume({}); assert.equal(s.controller.button.disabled,false);
     assert.match(s.element('#audioMemoryStatus').textContent,/Не удалось загрузить/);
 });
@@ -81,12 +82,49 @@ test('user list failure prevents saving and expanding user scope', async () => {
 });
 test('names are text, GUID formatting preserves selections, and missing users stay removable', async () => {
     const s=setup();
-    s.api.getJSON=async route=>route==='Users'?[{Id:'TESTUSER',Name:'<img src=x>'}]:{};
+    const get=s.api.getJSON;
+    s.api.getJSON=async route=>route==='Users'?[{Id:'TESTUSER',Name:'<img src=x>'}]:get(route);
     await s.controller.onResume({});
     assert.equal(s.controller.userChoices[0].checkbox.checked,true);
     assert.equal(s.element('#audioMemoryUsers').children[0].children[1].textContent,'<img src=x>');
-    s.api.getJSON=async route=>route==='Users'?[]:{};await s.controller.onResume({});
+    s.api.getJSON=async route=>route==='Users'?[]:get(route);await s.controller.onResume({});
     assert.equal(s.controller.userChoices[0].checkbox.checked,true);
     s.controller.userChoices[0].checkbox.checked=false;await s.controller.save();
     assert.equal(s.saved.AllowedUserIds.length,0);assert.equal(s.saved.EnableForAllUsers,false);
+});
+test('priority ordering and custom adult studio survive saving', async () => {
+    const s=setup();await s.controller.onResume({});
+    s.element('#audioPriorityAdd').onclick();
+    s.controller.priorityRows[0].select.value='custom::adult';s.controller.priorityRows[0].custom.value=' My Studio ';
+    s.element('#audioPriorityAdd').onclick();
+    s.controller.priorityRows[1].select.value='dub';
+    s.controller.captureProfile();
+    assert.equal(s.controller.priorityDrafts[''].profile.Rules[0].Adult,true);
+    // Invoke the actual button handler to move the second rule upward.
+    const rows=s.element('#audioPriorityRows').children;
+    rows[rows.length-1].children[3].onclick();
+    await s.controller.save();
+    assert.equal(s.saved.DefaultPriorities.Rules[0].Kind,'dub');
+    assert.equal(s.saved.DefaultPriorities.Rules[1].Studio,'My Studio');
+    assert.equal(s.saved.DefaultPriorities.Rules[1].Adult,true);
+});
+test('personal profile can inherit, override, and opt out with an empty list', async () => {
+    const s=setup();await s.controller.onResume({});
+    s.element('#audioPriorityAdd').onclick();
+    s.element('#audioPriorityScope').value='testuser';s.element('#audioPriorityScope').onchange();
+    assert.equal(s.element('#audioPriorityInherit').checked,true);
+    s.element('#audioPriorityInherit').checked=false;s.element('#audioPriorityInherit').onchange();
+    s.controller.priorityRows[0].select.value='adult';await s.controller.save();
+    assert.equal(s.saved.DefaultPriorities.Rules[0].Kind,'studio');
+    assert.equal(s.saved.UserPriorities[0].Profile.Rules[0].Kind,'adult');
+    s.controller.priorityRows=[];await s.controller.save();
+    assert.equal(s.saved.UserPriorities[0].Profile.Rules.length,0);
+    s.element('#audioPriorityInherit').checked=true;s.element('#audioPriorityInherit').onchange();await s.controller.save();
+    assert.equal(s.saved.UserPriorities.length,0);
+});
+test('empty custom studio blocks save and apply failure does not claim settings were lost', async () => {
+    const s=setup();await s.controller.onResume({});s.element('#audioPriorityAdd').onclick();
+    s.controller.priorityRows[0].select.value='custom';await s.controller.save();assert.equal(s.calls,0);
+    s.controller.priorityRows[0].custom.value='Studio';s.api.ajax=async()=>{throw Error('apply');};await s.controller.save();
+    assert.equal(s.calls,1);assert.match(s.controller.message.textContent,/Настройки сохранены, но/);
 });

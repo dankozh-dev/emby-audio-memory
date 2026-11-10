@@ -20,7 +20,7 @@ namespace Emby.AudioMemory
 
     [Authenticated(Roles = "Admin")]
     [Route("/AudioMemory/Reconcile", "POST")]
-    public sealed class ReconcileRequest : IReturn<object> { public bool DryRun { get; set; } = true; }
+    public sealed class ReconcileRequest : IReturn<object> { public bool DryRun { get; set; } = true; public bool Background { get; set; } }
 
     [Authenticated(Roles = "Admin")]
     [Route("/AudioMemory/Rollback", "POST")]
@@ -31,12 +31,17 @@ namespace Emby.AudioMemory
         public bool DryRun { get; set; } = true;
     }
 
+    [Authenticated(Roles = "Admin")]
+    [Route("/AudioMemory/Studios", "GET")]
+    public sealed class GetStudios : IReturn<object> { }
+
     public sealed class Service : IService
     {
         private static Plugin Current => Plugin.Instance ?? throw new InvalidOperationException("Audio Memory is not running.");
+        public object Get(GetStudios request) => PriorityMatch.Studios;
         public object Get(GetStatus request) => Current.Status();
         public object Post(SeedRequest request) => Current.Seed(request.UserId, request.EpisodeId, request.AudioStreamIndex, request.DryRun);
-        public object Post(ReconcileRequest request) => Current.Reconcile(request.DryRun);
+        public object Post(ReconcileRequest request) => request.Background && !request.DryRun ? Current.QueueReconcile() : Current.Reconcile(request.DryRun);
         public object Post(RollbackRequest request) => Current.Rollback(request.UserId, request.SeasonId, request.DryRun);
     }
 }

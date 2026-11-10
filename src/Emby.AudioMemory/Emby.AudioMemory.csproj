@@ -5,7 +5,7 @@
     <Nullable>enable</Nullable>
     <AssemblyName>Emby.AudioMemory</AssemblyName>
     <RootNamespace>Emby.AudioMemory</RootNamespace>
-    <Version>1.2.0</Version>
+    <Version>1.3.0</Version>
     <Description>Remember audio track choices per user and TV season in Emby Server.</Description>
     <RepositoryUrl>https://github.com/dankozh-dev/emby-audio-memory</RepositoryUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

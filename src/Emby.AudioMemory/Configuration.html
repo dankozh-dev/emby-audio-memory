@@ -11,6 +11,21 @@
         <div id="audioMemoryUsers"></div>
         <p class="fieldDescription">Если никто не выбран, запоминание отключено для всех.</p>
       </div>
+      <section style="margin:28px 0">
+        <h2>Приоритеты озвучки</h2>
+        <p>Первый подходящий вариант становится дорожкой по умолчанию. Ручной выбор для сезона важнее этого списка.</p>
+        <label for="audioPriorityScope">Чьи приоритеты</label>
+        <select id="audioPriorityScope" style="display:block;width:100%;padding:10px;margin:8px 0 16px"></select>
+        <label id="audioPriorityInheritLabel" style="display:block;margin-bottom:16px"><input type="checkbox" id="audioPriorityInherit"/> Использовать общий список</label>
+        <div id="audioPriorityEditor">
+          <label for="audioPriorityLanguage">Язык дорожки</label>
+          <select id="audioPriorityLanguage" style="display:block;padding:8px;margin:8px 0 16px"></select>
+          <div id="audioPriorityRows"></div>
+          <button type="button" id="audioPriorityAdd" is="emby-button" class="raised">Добавить приоритет</button>
+          <p class="fieldDescription">Пустой список оставляет обычный выбор Emby. «Любой дубляж» исключает дорожки с пометкой 18+.</p>
+        </div>
+        <p class="fieldDescription">18+ определяется по названию дорожки. Отсутствие пометки не гарантирует отсутствие мата.</p>
+      </section>
       <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="audioMemoryDebug"/><span>Подробный журнал событий</span></label>
       <p id="audioMemoryMessage" role="status"></p>
       <button disabled is="emby-button" type="submit" class="raised button-submit block"><span>Сохранить</span></button>

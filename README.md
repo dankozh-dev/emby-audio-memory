@@ -2,11 +2,30 @@
 
 [Русский](README.ru.md) · [Releases](https://github.com/dankozh-dev/emby-audio-memory/releases) · [Changelog](CHANGELOG.md)
 
-Choose an audio track in one episode and reuse that choice throughout the same season, separately for each Emby user.
+Choose default translation studios in priority order, and remember manual audio choices throughout a season, separately for each Emby user.
 This is useful when a release contains several dubs in the same language.
 
 **Experimental prerelease.** Server behaviour has been tested on **Emby Server 4.10.2.0**.
 A real Android client changing tracks and automatically advancing to the next episode has **not yet been verified**.
+
+## Studio priorities
+
+In the plugin settings, select **Общие настройки** (Common settings) or a user by name, choose the audio language, and add rules in priority order. Use the arrow buttons to reorder rules. A user inherits common settings unless **Использовать общий список** (Use common list) is unchecked; an empty personal list opts out of automatic priorities.
+
+- Eleven built-in studios/translators, each with a separate **18+** option, plus a literal custom studio name.
+- **Любой дубляж** (Any dub) matches explicit dubbing markers and excludes titles marked 18+.
+- **Любая 18+ дорожка** (Any 18+ track) matches any translation type marked 18+, within the chosen language.
+- A normal studio rule excludes titles marked 18+. Absence of that tag cannot guarantee profanity-free audio.
+- The first matching rule wins; within that rule, the file's default audio track wins, then the lowest stream index.
+- Missing language tags, blank titles and unknown studio aliases are not guessed. `ru/rus`, `en/eng` and `uk/ukr` are equivalent.
+
+Built-in choices: HDRezka, TVShows, OmskBird, LostFilm, LE-Production, Yuri Nemakhov, Kinomania, Zone Vision Studio, WinMedia, Jaskier and ViruseProject. The explicit alias dictionary includes HDr/HDR, TVS/TVShowsr, OBird/OmsrkBird and LE/LE_Proper; these are text matching rules, not verification of audio content. The authenticated `GET /AudioMemory/Studios` endpoint lists every alias.
+
+**Manual season choice → studio priorities → ordinary Emby selection.** Manual choices also keep the index fallback below. When a manual choice has no match, priorities can supply a temporary fallback without erasing the manual preference. Automatic choices never create manual preferences.
+
+Priorities cover movies and episodes for enabled users. Saving settings queues background application to eligible inactive items; library events and the scheduled task also apply them. Already saved independent selections are preserved. Changing/removing priorities updates or restores only selections still owned by the plugin with unchanged media layout. The current playback is left alone. No reset button is added.
+
+Priority lists start empty, including after an upgrade; no studio is enabled automatically.
 
 ## How it works
 
@@ -99,7 +118,7 @@ Example bodies use fictional item IDs; replace every placeholder with your serve
 These are the bodies for `Seed`, `Reconcile` and `Rollback`, respectively.
 `Seed` derives the season and track metadata from the specified episode; it does not accept an arbitrary studio name.
 Seed and reconciliation require the plugin and user to be enabled.
-Rollback is also available while the plugin is disabled.
+Rollback is also available while the plugin is disabled. Disable priorities before using rollback for removal: active priority rules may otherwise reapply on the next reconciliation. For movie backup records, `SeasonId: 0` addresses that user’s movie records.
 
 ## Disable, restore or uninstall
 
@@ -120,7 +139,7 @@ Writes record the original index before changing Emby, and state-file errors dis
 - The client must report `AudioTrackChange`. Selecting a track on an item's details page before playback may not produce that event.
 - Preferences are per user and season, shared by that user's devices. The latest explicit change received wins; preferences do not carry across seasons.
 - Saved audio selections remain unchanged for episodes with multiple media sources/versions, or when the source or audio layout changes after a plugin write.
-- Named source tracks need a language tag. Ambiguous named matches leave the audio selection unchanged; unnamed tracks use the index fallback described above.
+- Manually remembered named source tracks need a language tag. Ambiguous named matches leave the audio selection unchanged; unnamed tracks use the index fallback described above.
 - Public Emby APIs save the complete user-data record. Fresh reads, copies and activity checks reduce concurrency risks but are not a server-wide transaction with playback updates.
 - This is an Emby server plugin. **Jellyfin compatibility is not claimed.**
 

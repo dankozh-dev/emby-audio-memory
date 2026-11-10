@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.0 — Studio priorities
+
+- Add common and per-user ordered studio priorities, language filtering, custom names, separate 18+ choices, any dub and any adult track.
+- Prefer manual season choices; temporarily fall back to priorities without replacing a missing manual preference.
+- Apply defaults to movies and episodes while preserving independent selections and active playback.
+- Update/restore owned automatic choices when rules change; keep existing manual state compatible.
+- Add a named priority editor with reorder controls and explicit inheritance; lists start empty on upgrade.
+
 ## 1.2.0 — User selection
 
 - Replace manual user IDs with named account checkboxes loaded from Emby.

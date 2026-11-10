@@ -181,6 +181,55 @@ using(var f=new Fixture()) {
  f.Start();f.P.Reconcile(false);
  Check(Audio(f,f.U1,f.E1)==6&&Audio(f,f.U1,f.E2)==3,"original schema-1 named preference reloads and matches reordered tracks by title");
 }
+using(var f=new Fixture()) {
+ f.P.Configuration.DefaultPriorities=new(){Rules=new[]{new PriorityRule{Studio="hdrezka"}}};
+ var history=Rest(f.Data.GetUserData(f.U1,f.E2));
+ f.P.Reconcile(true);Check(f.Data.Saves==0,"priority dry run does not write");
+ f.P.Reconcile(false);
+ Check(Audio(f,f.U1,f.E2)==1&&State(f).Preferences.Count==0,"automatic priorities never create manual preferences");
+ Check(Audio(f,f.U2,f.E2)==null&&Audio(f,f.U1,f.Active)==null,"priorities respect user scope and active playback");
+ Check(Rest(f.Data.GetUserData(f.U1,f.E2))==history,"priorities preserve playback history");
+ f.Raise(f.E1,6,ProgressEvent.AudioTrackChange,false);
+ Check(Audio(f,f.U1,f.E2)==3,"manual season selection replaces earlier automatic choice");
+ f.P.Reconcile(false);Check(Audio(f,f.U1,f.E2)==3,"reconcile cannot overwrite manual season preference");
+ f.E2.Sources[0].MediaStreams.Single(t=>t.Index==3).Title="Missing manual studio";
+ var late=Fixture.Ep(110,f.Season,6);late.Sources[0].MediaStreams.Single(t=>t.Index==6).Title="Other studio";f.Lib.Items.Add(late);
+ f.P.Reconcile(false);
+ Check(Audio(f,f.U1,late)==1&&State(f).Preferences.Single().Title=="HDRezka (Dub)","missing manual track temporarily uses priorities without erasing preference");
+ var later=Fixture.Ep(111,f.Season,7);f.Lib.Items.Add(later);f.Lib.RaiseAdded(later);
+ Check(Audio(f,f.U1,later)==7,"manual studio returns on a later episode despite priorities");
+}
+using(var f=new Fixture()) {
+ f.P.Configuration.EnableForAllUsers=true;
+ f.P.Configuration.DefaultPriorities=new(){Rules=new[]{new PriorityRule{Kind="dub"}}};
+ f.P.Configuration.UserPriorities=new[]{new UserPriorityProfile{UserId=f.U2.Id.ToString(),Profile=new(){Rules=new[]{new PriorityRule{Studio="hdrezka"}}}}};
+ f.P.Reconcile(false);
+ Check(Audio(f,f.U1,f.E2)==3&&Audio(f,f.U2,f.E2)==1,"personal list overrides common list and users stay independent");
+ f.P.Configuration.UserPriorities[0].Profile.Rules=Array.Empty<PriorityRule>();f.P.Reconcile(false);
+ Check(Audio(f,f.U2,f.E2)==null&&Audio(f,f.U1,f.E2)==3,"empty personal list opts out and restores only owned automatic selections");
+ f.Data.GetUserData(f.U1,f.E2).AudioStreamIndex=1;
+ f.P.Configuration.DefaultPriorities.Rules=Array.Empty<PriorityRule>();f.P.Reconcile(false);
+ Check(Audio(f,f.U1,f.E2)==1,"removing priorities preserves a later independent selection");
+}
+using(var f=new Fixture()) {
+ var movie=new Video{InternalId=300,Sources=Fixture.Ep(300,f.Season,6).Sources};f.Lib.Items.Add(movie);
+ f.P.Configuration.DefaultPriorities=new(){Rules=new[]{new PriorityRule{Kind="dub"}}};f.P.Reconcile(false);
+ Check(f.Data.GetUserData(f.U1,movie).AudioStreamIndex==6,"movies receive default priorities without a season");
+ f.P.Configuration.DefaultPriorities.Rules=new[]{new PriorityRule{Studio="hdrezka"}};f.P.Reconcile(false);
+ Check(f.Data.GetUserData(f.U1,movie).AudioStreamIndex==1,"changed priorities update an owned movie selection");
+ f.P.Configuration.DefaultPriorities.Rules=Array.Empty<PriorityRule>();f.P.Reconcile(false);
+ Check(f.Data.GetUserData(f.U1,movie).AudioStreamIndex==null,"removing rules restores original movie selection");
+}
+using(var f=new Fixture()) {
+ f.P.Configuration.DefaultPriorities=new(){Rules=new[]{new PriorityRule{Kind="dub"}}};
+ f.E2.Visible=false;
+ f.P.QueueReconcile();f.P.QueueReconcile();
+ for(int n=0;n<200;n++) { var status=JsonSerializer.SerializeToElement(f.P.Status());if(!status.GetProperty("ApplyRunning").GetBoolean())break;Thread.Sleep(10); }
+ var result=JsonSerializer.SerializeToElement(f.P.Status());
+ Check(!result.GetProperty("ApplyRunning").GetBoolean()&&result.GetProperty("ApplyError").ValueKind==JsonValueKind.Null,"background requests finish and report status");
+ Check(Audio(f,f.U1,f.E1)==6&&Audio(f,f.U1,f.E2)==null,"background apply respects visibility and active playback");
+ Check(State(f).Preferences.Count==0,"background priorities cannot train manual preferences");
+}
 Console.WriteLine($"TOTAL {checks} behavior checks passed");
 
 sealed class Fixture:IDisposable {
@@ -195,7 +244,7 @@ sealed class Fixture:IDisposable {
   Sessions.List.Add(new(){UserId=U2.Id.ToString(),NowPlayingItem=new(){Id=Active.InternalId.ToString()}});
   Start();
  }
- public void Start(){P=new(new Paths(Dir),new Xml(),new Json(),Lib,new Users(U1,U2),Data,Sessions,new Logs());P.Configuration.Enable=true;P.Configuration.AllowedUserIds=new[]{U1.Id.ToString()};}
+ public void Start(){P=new(new Paths(Dir),new Xml(),new Json(),Lib,new UserManagerStub(U1,U2),Data,Sessions,new Logs());P.Configuration.Enable=true;P.Configuration.AllowedUserIds=new[]{U1.Id.ToString()};}
  public static Episode Ep(long id,Season s,int index)=>new(){InternalId=id,Season=s,Sources=new(){new(){Id="mediasource_"+id,MediaStreams=new(){new(){Index=1,Type=MediaStreamType.Audio,Title="HDRezka",Language="rus"},new(){Index=index,Type=MediaStreamType.Audio,Title="HDRezka (Dub)",Language="rus"}}}}};
  public void Raise(Episode e,int index,ProgressEvent ev,bool automated,string? source=null)=>Sessions.Raise(new(){Item=e,Session=new(){UserId=U1.Id.ToString(),UserInternalId=1},PlaySession=new(){PlayState=new(){AudioStreamIndex=index}},MediaSourceId=source??e.Sources[0].Id,EventName=ev,IsAutomated=automated});
  public void Dispose(){P.Dispose();Directory.Delete(Dir,true);}
@@ -204,8 +253,8 @@ sealed class Paths(string dataPath):MediaBrowser.Common.Configuration.IApplicati
 sealed class Xml:MediaBrowser.Model.Serialization.IXmlSerializer{}
 sealed class Json:MediaBrowser.Model.Serialization.IJsonSerializer {public string SerializeToString<T>(T o)=>JsonSerializer.Serialize(o);public T DeserializeFromString<T>(string s)=>JsonSerializer.Deserialize<T>(s)!;}
 sealed class Logs:MediaBrowser.Model.Logging.ILogManager,MediaBrowser.Model.Logging.ILogger {public MediaBrowser.Model.Logging.ILogger GetLogger(string n)=>this;public void ErrorException(string s,Exception e)=>Console.WriteLine("[expected/diagnostic] "+s+" "+e.Message);public void Info(string s,params object?[] o){} }
-sealed class Lib:ILibraryManager {public List<BaseItem> Items=new();public event EventHandler<ItemChangeEventArgs>? ItemAdded;public event EventHandler<ItemChangeEventArgs>? ItemUpdated;public BaseItem? GetItemById(long id)=>Items.SingleOrDefault(i=>i.InternalId==id);public IEnumerable<BaseItem> GetItemList(InternalItemsQuery q)=>Items.OfType<Episode>().Where(e=>e.Season==q.Parent);public void RaiseAdded(Episode e)=>ItemAdded?.Invoke(this,new(){Item=e});}
-sealed class Users(params User[] list):IUserManager{public User? GetUserById(Guid id)=>list.SingleOrDefault(u=>u.Id==id);}
+sealed class Lib:ILibraryManager {public List<BaseItem> Items=new();public event EventHandler<ItemChangeEventArgs>? ItemAdded;public event EventHandler<ItemChangeEventArgs>? ItemUpdated;public BaseItem? GetItemById(long id)=>Items.SingleOrDefault(i=>i.InternalId==id);public IEnumerable<BaseItem> GetItemList(InternalItemsQuery q)=>q.Parent==null?Items.OfType<Video>():Items.OfType<Episode>().Where(e=>e.Season==q.Parent);public void RaiseAdded(Episode e)=>ItemAdded?.Invoke(this,new(){Item=e});}
+sealed class UserManagerStub(params User[] list):IUserManager{public MediaBrowser.Model.Querying.QueryResult<Guid> GetUserIds(MediaBrowser.Model.Querying.UserQuery q)=>new(){Items=list.Select(u=>u.Id).ToArray()};public User? GetUserById(Guid id)=>list.SingleOrDefault(u=>u.Id==id);}
 sealed class SessionStub:ISessionManager{public List<SessionInfo> List=new();public IEnumerable<SessionInfo> Sessions=>List;public event EventHandler<PlaybackProgressEventArgs>? PlaybackProgress;public void Raise(PlaybackProgressEventArgs e)=>PlaybackProgress?.Invoke(this,e);}
 sealed class Data:IUserDataManager {
  public Dictionary<(Guid,long),UserItemData> Rows=new();public int Saves;public bool ThrowBeforeSaveOnce,ThrowAfterSaveOnce;

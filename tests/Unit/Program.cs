@@ -59,4 +59,36 @@ Check(TrackMatch.SelectIndex(indexed,"LostFilm", "rus", 6)==null,"named mode doe
 indexed[0].Title="HDRezka (Dub)";
 Check(TrackMatch.SelectIndex(indexed,"HDRezka (Dub)", "rus", 9)==null,"ambiguous named match cannot fall back");
 Check(TrackMatch.SelectIndex(new[]{indexed[1],indexed[1]},"", "", 6)==null,"duplicate stream indices rejected");
+var ranked = new[] {
+ new AudioTrack { Index=1,Title="TVShows",Language="rus",IsDefault=true },
+ new AudioTrack { Index=2,Title="DUB | HDRezka Studio 18+",Language="rus" },
+ new AudioTrack { Index=3,Title="MVO | HDRezka Studio",Language="rus" },
+ new AudioTrack { Index=4,Title="HDRezka (Dub)",Language="rus" },
+ new AudioTrack { Index=5,Title="DUB, WinMedia",Language="ukr" }
+};
+PriorityRule StudioRule(string name,bool adult=false)=>new PriorityRule{Studio=name,Adult=adult};
+PriorityProfile Rank(params PriorityRule[] rules)=>new PriorityProfile{Language="rus",Rules=rules};
+Check(PriorityMatch.SelectIndex(ranked,Rank(StudioRule("hdrezka"),StudioRule("tvshows")))==3,"studio priority outranks default flag and excludes 18+");
+Check(PriorityMatch.SelectIndex(ranked,Rank(StudioRule("hdrezka",true)))==2,"adult studio is a separate choice");
+Check(PriorityMatch.SelectIndex(ranked,Rank(new PriorityRule{Kind="dub"}))==4,"any dub excludes adult and wrong language tracks");
+Check(PriorityMatch.SelectIndex(ranked,Rank(new PriorityRule{Kind="adult"}))==2,"any adult selects marked audio");
+Check(PriorityMatch.SelectIndex(ranked,Rank(StudioRule("missing"),StudioRule("tvshows")))==1,"absent studio falls through to next rule");
+Check(PriorityMatch.SelectIndex(ranked,Rank())==null,"empty list does not select audio");
+ranked[3].IsDefault=true;
+Check(PriorityMatch.SelectIndex(ranked,Rank(StudioRule("hdrezka")))==4,"within a rule prefer default then stream index");
+Check(PriorityMatch.SelectIndex(ranked,new PriorityProfile{Language="uk",Rules=new[]{new PriorityRule{Kind="dub"}}})==5,"explicit language aliases supported");
+Check(PriorityMatch.SelectIndex(ranked,new PriorityProfile{Language="",Rules=new[]{new PriorityRule{Kind="adult"}}})==null,"empty language cannot match all languages");
+foreach(var title in new[]{"Dub [HDRezka]", "HDrezka (D)", "Дубляж исправленный", "Профессиональный дублированный", "Дублирование", "DUB, WinMedia"})
+ Check(PriorityMatch.IsDub(title),"dub marker recognized: "+title);
+foreach(var title in new[]{"MVO HDRezka", "Dublin Studio", "DVO", "DTS", "HDRezka", "D"})
+ Check(!PriorityMatch.IsDub(title),"not guessed to be a dub: "+title);
+foreach(var title in new[]{"HDr", "HDR", "AC3 | HDRezka Studio", "hdrezka"})
+ Check(PriorityMatch.SelectIndex(new[]{new AudioTrack{Index=7,Title=title,Language="ru"}},Rank(StudioRule("hdrezka")))==7,"explicit alias: "+title);
+Check(PriorityMatch.SelectIndex(new[]{new AudioTrack{Index=7,Title="NotHDRezka",Language="rus"}},Rank(StudioRule("hdrezka")))==null,"studio boundary avoids substring false positives");
+Check(PriorityMatch.SelectIndex(new[]{new AudioTrack{Index=7,Title="Studio [A]+",Language="rus"}},Rank(new PriorityRule{Kind="custom",Studio="Studio [A]+"}))==7,"custom studio is literal text not regex");
+Check(PriorityMatch.SelectIndex(new[]{new AudioTrack{Index=7,Title="Studio [A]+ 18+",Language="rus"}},Rank(new PriorityRule{Kind="custom",Studio="Studio [A]+"}))==null,"custom studio also excludes adult tracks");
+Check(!PriorityMatch.IsAdult("118+"),"adult marker does not match 118+");
+Check(PriorityMatch.IsAdult("HDRezka (18 +)"),"adult marker tolerates whitespace and parentheses");
+Check(PriorityMatch.SelectIndex(new[]{new AudioTrack{Index=7,Title="",Language="rus"}},Rank(new PriorityRule{Kind="dub"},new PriorityRule{Kind="adult"}))==null,"unnamed title cannot be guessed into a priority");
+
 Console.WriteLine($"{count} checks passed");

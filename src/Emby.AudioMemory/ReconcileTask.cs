@@ -8,9 +8,9 @@ namespace Emby.AudioMemory
 {
     public sealed class ReconcileTask : IScheduledTask
     {
-        public string Name => "Apply remembered season audio";
+        public string Name => "Apply audio choices and studio priorities";
         public string Key => "AudioMemoryReconcile";
-        public string Description => "Applies saved audio choices to new or newly scanned episodes; preserves later independent choices.";
+        public string Description => "Applies manual season choices and studio priorities to inactive movies and episodes; preserves independent choices.";
         public string Category => "Audio Memory";
         public IEnumerable<TaskTriggerInfo> GetDefaultTriggers() => new[]
         {

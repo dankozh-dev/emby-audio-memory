@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Plugins;
 using MediaBrowser.Controller.Entities;
@@ -11,6 +12,7 @@ using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Session;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Dto;
+using MediaBrowser.Model.Querying;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Plugins;
 using MediaBrowser.Model.Serialization;
@@ -37,6 +39,9 @@ namespace Emby.AudioMemory
         private string? error;
         private bool disposed;
         private long revision;
+        private bool applyRunning;
+        private bool applyAgain;
+        private string? applyError;
 
         public Plugin(IApplicationPaths paths, IXmlSerializer xml, IJsonSerializer json,
             ILibraryManager library, IUserManager users, IUserDataManager userdata,
@@ -103,7 +108,7 @@ namespace Emby.AudioMemory
         private void OnProgress(object sender, PlaybackProgressEventArgs e)
         {
             // Snapshot mutable event/session fields before waiting for another operation.
-            if (!(e.Item is Episode episode) || e.Session == null) return;
+            if (!(e.Item is Video episode) || e.Session == null) return;
             var userId = TrackMatch.UserKey(e.Session.UserId);
             if (!Allowed(userId)) return;
             var itemId = episode.InternalId;
@@ -128,8 +133,17 @@ namespace Emby.AudioMemory
                     }
                     if (eventName != ProgressEvent.AudioTrackChange || automated || !index.HasValue) return;
                     var user = users.GetUserById(new Guid(userId));
-                    var current = library.GetItemById(itemId) as Episode;
-                    if (user == null || current == null) return;
+                    var video = library.GetItemById(itemId) as Video;
+                    if (user == null || video == null) return;
+                    if (!(video is Episode current))
+                    {
+                        var sources = Sources(user, video);
+                        if (sources.Count != 1 || (!string.IsNullOrEmpty(sourceId) && sources[0].Id != sourceId) ||
+                            !sources[0].MediaStreams.Any(t => t.Type == MediaStreamType.Audio && t.Index == index.Value)) return;
+                        foreach (var b in state.Backups.Where(b => b.UserId == userId && b.EpisodeId == itemId && !b.Restored)) b.Restored = true;
+                        SaveState();
+                        return;
+                    }
                     var preference = MakePreference(user, current, index.Value, sourceId, nextRevision);
                     if (preference == null) return;
                     var old = FindPreference(userId, preference.SeasonId);
@@ -148,25 +162,29 @@ namespace Emby.AudioMemory
 
         private void OnItemChanged(object sender, ItemChangeEventArgs e)
         {
-            if (!(e.Item is Episode)) return;
-            var itemId = e.Item.InternalId;
+            if (!(e.Item is Video)) return;
             try
             {
                 lock (gate)
                 {
                     if (disposed || error != null || !Configuration.Enable) return;
-                    var episode = library.GetItemById(itemId) as Episode;
-                    var seasonId = episode?.Season?.InternalId;
-                    if (episode == null || !seasonId.HasValue) return;
-                    foreach (var p in state.Preferences.Where(p => p.Active && p.SeasonId == seasonId && Allowed(p.UserId)).ToArray())
-                    {
-                        var user = users.GetUserById(new Guid(p.UserId));
-                        if (user != null) ApplyEpisode(user, episode, p, false, false, 0);
-                    }
+                    var video = library.GetItemById(e.Item.InternalId) as Video;
+                    if (video == null) return;
+                    foreach (var user in EnabledUsers())
+                        ApplyVideo(user, video, ManualPreference(user, video), false, false, 0);
                 }
             }
-            catch (Exception ex) { log.ErrorException("AudioMemory new episode was not updated.", ex); }
+            catch (Exception ex) { log.ErrorException("AudioMemory library item was not updated.", ex); }
         }
+
+        private User[] EnabledUsers() => users.GetUserIds(new UserQuery()).Items
+            .Select(id => users.GetUserById(id)).Where(u => u != null && Allowed(u.Id.ToString("N"))).Select(u => u!).ToArray();
+
+        private Preference? ManualPreference(User user, Video video) => video is Episode episode && episode.Season != null
+            ? state.Preferences.FirstOrDefault(p => p.UserId == user.Id.ToString("N") && p.SeasonId == episode.Season.InternalId && p.Active) : null;
+        private PriorityProfile Profile(User user) => (Configuration.UserPriorities ?? Array.Empty<UserPriorityProfile>())
+            .FirstOrDefault(p => p != null && TrackMatch.UserKey(p.UserId) == user.Id.ToString("N"))?.Profile
+            ?? Configuration.DefaultPriorities ?? new PriorityProfile();
 
         private Preference? FindPreference(string userId, long seasonId) => state.Preferences.FirstOrDefault(p => p.UserId == userId && p.SeasonId == seasonId);
         private void SetPreference(Preference p)
@@ -175,7 +193,7 @@ namespace Emby.AudioMemory
             state.Preferences.Add(p);
         }
 
-        private List<MediaSourceInfo> Sources(User user, Episode episode)
+        private List<MediaSourceInfo> Sources(User user, Video episode)
         {
             return episode.GetMediaSources(user, true, false, true, false, episode.CollectionFolders,
                 episode.LibraryOptions, CancellationToken.None);
@@ -202,7 +220,7 @@ namespace Emby.AudioMemory
                 Revision = rev, UpdatedUtc = DateTime.UtcNow, Active = true };
         }
 
-        private bool IsPlaying(User user, Episode episode)
+        private bool IsPlaying(User user, Video episode)
         {
             // Conservatively skip if any session is playing the item, even another user.
             // This also covers shared sessions and avoids racing server progress writers.
@@ -215,24 +233,41 @@ namespace Emby.AudioMemory
             .Where(t => t.Type == MediaStreamType.Audio).OrderBy(t => t.Index)
             .Select(t => t.Index + "|" + TrackMatch.Normalize(t.Language) + "|" + TrackMatch.Normalize(t.Title)));
 
-        private PlanRow ApplyEpisode(User user, Episode episode, Preference p, bool dryRun, bool explicitChange, long excludedId)
+        private PlanRow ApplyVideo(User user, Video episode, Preference? p, bool dryRun, bool explicitChange, long excludedId)
         {
-            var row = new PlanRow { UserId = p.UserId, SeasonId = p.SeasonId, EpisodeId = episode.InternalId };
-            if (episode.Season?.InternalId != p.SeasonId) { row.Result = "different-season"; return row; }
+            var userId = user.Id.ToString("N");
+            var seasonId = (episode as Episode)?.Season?.InternalId ?? 0;
+            var row = new PlanRow { UserId = userId, SeasonId = seasonId, EpisodeId = episode.InternalId };
+            if (!episode.IsVisibleStandalone(user)) { row.Result = "not-visible-to-user"; return row; }
+            if (p != null && seasonId != p.SeasonId) { row.Result = "different-season"; return row; }
             if (episode.InternalId == excludedId || IsPlaying(user, episode)) { row.Result = "active-playback"; return row; }
             var sources = Sources(user, episode);
             if (sources.Count != 1) { row.Result = "multiple-or-missing-sources"; return row; }
             var source = sources[0];
-            var after = TrackMatch.SelectIndex(source.MediaStreams.Where(t => t.Type == MediaStreamType.Audio)
-                .Select(t => new AudioTrack { Index = t.Index, Title = t.Title, Language = t.Language }), p.Title, p.Language, p.SourceAudioStreamIndex);
-            if (!after.HasValue) { row.Result = "missing-or-ambiguous-match"; return row; }
+            var tracks = source.MediaStreams.Where(t => t.Type == MediaStreamType.Audio)
+                .Select(t => new AudioTrack { Index = t.Index, Title = t.Title, Language = t.Language, IsDefault = t.IsDefault }).ToArray();
+            var after = p == null ? null : TrackMatch.SelectIndex(tracks, p.Title, p.Language, p.SourceAudioStreamIndex);
+            var kind = after.HasValue ? "manual" : "priority";
+            if (!after.HasValue) after = PriorityMatch.SelectIndex(tracks, Profile(user));
+            explicitChange = explicitChange && kind == "manual";
+            var backup = state.Backups.LastOrDefault(b => b.UserId == userId && b.EpisodeId == episode.InternalId && !b.Restored);
+            var restoring = !after.HasValue && backup?.SelectionKind == "priority";
+            if (!after.HasValue && !restoring) { row.Result = "missing-or-ambiguous-match"; return row; }
+            if (restoring) after = backup!.OriginalIndex;
             var data = userdata.GetUserData(user, episode);
             row.Before = data.AudioStreamIndex; row.After = after;
-            if (data.AudioStreamIndex == after) { row.Result = "already-selected"; return row; }
-            var backup = state.Backups.LastOrDefault(b => b.UserId == p.UserId && b.EpisodeId == episode.InternalId && !b.Restored);
             var layout = Layout(source);
             if (backup != null && (backup.MediaSourceId != source.Id || backup.StreamLayout != layout))
             { row.Result = "source-changed"; return row; }
+            if (data.AudioStreamIndex == after)
+            {
+                row.Result = "already-selected";
+                if (!dryRun && backup != null && (restoring || (backup.SelectionKind != kind && BackupRules.Owns(backup, after))))
+                { if (restoring) { backup.Restored = true; backup.Pending = false; backup.PendingIndex = null; } else backup.SelectionKind = kind; SaveState(); }
+                return row;
+            }
+            if (restoring && !BackupRules.Owns(backup!, data.AudioStreamIndex))
+            { row.Result = "selection-changed-outside-plugin"; return row; }
             if (!explicitChange && !BackupRules.CanReconcile(backup, data.AudioStreamIndex))
             { row.Result = "selection-changed-outside-plugin"; return row; }
             if (dryRun) { row.Result = "would-write"; return row; }
@@ -244,14 +279,16 @@ namespace Emby.AudioMemory
             { row.Result = "selection-changed-outside-plugin"; return row; }
             if (backup == null)
             {
-                backup = new Backup { UserId = p.UserId, SeasonId = p.SeasonId, EpisodeId = episode.InternalId,
+                backup = new Backup { UserId = userId, SeasonId = seasonId, EpisodeId = episode.InternalId,
                     MediaSourceId = source.Id, StreamLayout = layout, OriginalIndex = data.AudioStreamIndex };
                 state.Backups.Add(backup);
             }
             // SDK GetUserData may return a shared mutable object; retain the scalar value
             // before the durable write instead of comparing two potentially aliased records.
             var expectedBeforeWrite = data.AudioStreamIndex;
-            backup.Pending = true; backup.PendingIndex = after; SaveState();
+            backup.Pending = true; backup.PendingIndex = after;
+            if (!restoring) backup.SelectionKind = kind;
+            SaveState();
             // The state fsync may take time: check activity and audio ownership once more,
             // and clone the newest record rather than a pre-fsync playback snapshot.
             var latest = userdata.GetUserData(user, episode);
@@ -264,8 +301,10 @@ namespace Emby.AudioMemory
             var updated = json.DeserializeFromString<UserItemData>(json.SerializeToString(data));
             updated.AudioStreamIndex = after;
             userdata.SaveUserData(user, episode, updated, UserDataSaveReason.Import, CancellationToken.None);
-            backup.LastWrittenIndex = after; backup.Pending = false; backup.PendingIndex = null; SaveState();
-            row.Result = "written";
+            backup.LastWrittenIndex = after; backup.Pending = false; backup.PendingIndex = null;
+            if (restoring) backup.Restored = true;
+            SaveState();
+            row.Result = restoring ? "priority-restored" : "written";
             return row;
         }
 
@@ -275,13 +314,13 @@ namespace Emby.AudioMemory
             var season = library.GetItemById(p.SeasonId) as Season;
             if (user == null || season == null) throw new InvalidOperationException("User or season no longer exists.");
             return library.GetItemList(new InternalItemsQuery { Parent = season, Recursive = true, IncludeItemTypes = new[] { "Episode" } })
-                .OfType<Episode>().Select(e => ApplyEpisode(user, e, p, dryRun, explicitChange, excludedId)).ToList();
+                .OfType<Episode>().Select(e => ApplyVideo(user, e, p, dryRun, explicitChange, excludedId)).ToList();
         }
 
         public object Status()
         {
             lock (gate) return new { Enabled = Configuration.Enable, EnableForAllUsers = Configuration.EnableForAllUsers, AllowedUserIds = Configuration.AllowedUserIds,
-                Error = error, StatePath = statePath,
+                Error = error, ApplyRunning = applyRunning, ApplyError = applyError, StatePath = statePath,
                 Preferences = json.DeserializeFromString<List<Preference>>(json.SerializeToString(state.Preferences)),
                 Backups = json.DeserializeFromString<List<Backup>>(json.SerializeToString(state.Backups)), RecentEvents = events.ToArray() };
         }
@@ -302,16 +341,55 @@ namespace Emby.AudioMemory
             }
         }
 
-        public object Reconcile(bool dryRun)
+        public object QueueReconcile()
         {
             lock (gate)
             {
                 EnsureWritable();
-                var rows = new List<PlanRow>();
-                foreach (var p in state.Preferences.Where(p => p.Active && Allowed(p.UserId)).ToArray())
-                    rows.AddRange(ApplySeason(p, dryRun, false));
-                return new { DryRun = dryRun, Episodes = rows };
+                if (applyRunning) { applyAgain = true; return new { Queued = true }; }
+                applyRunning = true; applyError = null;
             }
+            Task.Run(() =>
+            {
+                while (true)
+                {
+                    try { Reconcile(false); }
+                    catch (Exception ex)
+                    {
+                        lock (gate) applyError = "Could not apply audio priorities; see server log.";
+                        log.ErrorException("AudioMemory background apply failed.", ex);
+                    }
+                    lock (gate)
+                    {
+                        if (applyAgain && !disposed && Configuration.Enable && error == null)
+                        { applyAgain = false; continue; }
+                        applyRunning = false; applyAgain = false; break;
+                    }
+                }
+            });
+            return new { Queued = true };
+        }
+
+        public object Reconcile(bool dryRun)
+        {
+            User[] enabled;
+            lock (gate) { EnsureWritable(); enabled = EnabledUsers(); }
+            var rows = new List<PlanRow>();
+            foreach (var user in enabled)
+            {
+                foreach (var video in library.GetItemList(new InternalItemsQuery { User = user, Recursive = true,
+                    IncludeItemTypes = new[] { "Movie", "Episode" } }).OfType<Video>())
+                {
+                    // Release the gate between items so manual changes and status requests can proceed.
+                    lock (gate)
+                    {
+                        if (disposed || error != null || !Configuration.Enable) return new { DryRun = dryRun, Episodes = rows };
+                        if (!Allowed(user.Id.ToString("N"))) continue;
+                        rows.Add(ApplyVideo(user, video, ManualPreference(user, video), dryRun, false, 0));
+                    }
+                }
+            }
+            return new { DryRun = dryRun, Episodes = rows };
         }
 
         public object Rollback(string userId, long seasonId, bool dryRun)
@@ -333,7 +411,7 @@ namespace Emby.AudioMemory
                 {
                     var row = new PlanRow { UserId = userId, SeasonId = seasonId, EpisodeId = b.EpisodeId, After = b.OriginalIndex };
                     rows.Add(row);
-                    var episode = library.GetItemById(b.EpisodeId) as Episode;
+                    var episode = library.GetItemById(b.EpisodeId) as Video;
                     if (episode == null) { row.Result = "missing-episode"; continue; }
                     if (IsPlaying(user, episode)) { row.Result = "active-playback"; continue; }
                     var sources = Sources(user, episode);

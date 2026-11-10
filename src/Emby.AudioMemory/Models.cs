@@ -13,6 +13,8 @@ namespace Emby.AudioMemory
         public bool EnableForAllUsers { get; set; }
         public string[] AllowedUserIds { get; set; } = Array.Empty<string>();
         public bool DebugLogging { get; set; }
+        public PriorityProfile DefaultPriorities { get; set; } = new PriorityProfile();
+        public UserPriorityProfile[] UserPriorities { get; set; } = Array.Empty<UserPriorityProfile>();
     }
 
     public sealed class Preference
@@ -40,6 +42,7 @@ namespace Emby.AudioMemory
         public int? PendingIndex { get; set; }
         public bool Pending { get; set; }
         public bool Restored { get; set; }
+        public string SelectionKind { get; set; } = "manual";
     }
 
     public sealed class State
@@ -122,6 +125,7 @@ namespace Emby.AudioMemory
 
     public sealed class AudioTrack
     {
+        public bool IsDefault { get; set; }
         public int Index { get; set; }
         public string? Title { get; set; }
         public string? Language { get; set; }
