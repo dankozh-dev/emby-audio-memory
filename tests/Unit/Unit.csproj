@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><Nullable>enable</Nullable></PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../src/Emby.AudioMemory/Models.cs" Link="Models.cs" />
+    <PackageReference Include="MediaBrowser.Common" Version="4.9.1.90" />
+    <PackageReference Include="System.Memory" Version="4.6.3" />
+  </ItemGroup>
+</Project>

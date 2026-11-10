@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Emby.AudioMemory</AssemblyName>
+    <RootNamespace>Emby.AudioMemory</RootNamespace>
+    <Version>1.1.0</Version>
+    <Description>Remember audio track choices per user and TV season in Emby Server.</Description>
+    <RepositoryUrl>https://github.com/dankozh-dev/emby-audio-memory</RepositoryUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <Deterministic>true</Deterministic>
+    <DebugType Condition="'$(Configuration)' == 'Release'">none</DebugType>
+    <DebugSymbols Condition="'$(Configuration)' == 'Release'">false</DebugSymbols>
+    <PathMap>$(MSBuildProjectDirectory)=/_/src/Emby.AudioMemory</PathMap>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="MediaBrowser.Common" Version="4.9.1.90" PrivateAssets="all" ExcludeAssets="runtime" />
+    <PackageReference Include="MediaBrowser.Server.Core" Version="4.9.1.90" PrivateAssets="all" ExcludeAssets="runtime" />
+    <PackageReference Include="System.Memory" Version="4.6.3" PrivateAssets="all" ExcludeAssets="runtime" />
+    <EmbeddedResource Include="Configuration.html" />
+  </ItemGroup>
+</Project>

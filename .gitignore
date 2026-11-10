@@ -1,0 +1,9 @@
+**/bin/
+**/obj/
+artifacts/
+.nuget/
+.sdk-home/
+.DS_Store
+*.user
+*.suo
+*.pdb
