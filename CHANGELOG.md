@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.1 — Configuration page fix
+
+- Use the Emby 4.10 view/controller format so the dashboard can open Audio Memory settings.
+- Move JavaScript into an embedded AMD module; Emby comments out inline scripts in configuration HTML.
+- Show loading and saving errors, and prevent saving an unloaded form.
+- Add five configuration-controller regression tests. Audio matching and stored preferences are unchanged.
+
 ## 1.1.0 — Initial public prerelease
 
 - Remember explicit audio-track changes separately for each user and season.

@@ -62,7 +62,8 @@ namespace Emby.AudioMemory
 
         public IEnumerable<PluginPageInfo> GetPages() => new[]
         {
-            new PluginPageInfo { Name = "AudioMemory", EmbeddedResourcePath = "Emby.AudioMemory.Configuration.html" }
+            new PluginPageInfo { Name = "AudioMemory", EmbeddedResourcePath = "Emby.AudioMemory.Configuration.html" },
+            new PluginPageInfo { Name = "AudioMemoryJs", EmbeddedResourcePath = "Emby.AudioMemory.Configuration.js" }
         };
 
         private bool Allowed(string userId) => Configuration.Enable &&

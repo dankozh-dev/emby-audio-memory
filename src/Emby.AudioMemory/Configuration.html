@@ -1,40 +1,16 @@
-<!DOCTYPE html>
-<html><head><title>Audio Memory</title></head><body>
-<div id="audioMemoryPage" data-role="page" class="page type-interior pluginConfigurationPage">
-  <div data-role="content"><div class="content-primary">
+<div id="audioMemoryPage" is="emby-scroller" data-controller="configurationpage?name=AudioMemoryJs" class="view flex flex-direction-column scrollFrameY flex-grow" data-horizontal="false" data-forcescrollbar="true" data-bindheader="true" data-title="Audio Memory">
+  <div class="scrollSlider flex-grow padded-left padded-left-page padded-right padded-top-page padded-bottom-page"><div class="readOnlyContent auto-center">
     <h1>Audio Memory</h1>
     <p>Запоминает выбранную озвучку отдельно для пользователя и сезона.</p>
     <form id="audioMemoryForm">
       <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="audioMemoryEnable"/><span>Включить</span></label>
       <div class="inputContainer"><label for="audioMemoryUsers">Идентификаторы пользователей через запятую</label><input is="emby-input" id="audioMemoryUsers"/><div class="fieldDescription">Пустой список отключает запись для всех пользователей.</div></div>
       <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="audioMemoryDebug"/><span>Подробный журнал событий</span></label>
-      <button is="emby-button" type="submit" class="raised button-submit block"><span>Сохранить</span></button>
+      <p id="audioMemoryMessage" role="status"></p>
+      <button disabled is="emby-button" type="submit" class="raised button-submit block"><span>Сохранить</span></button>
     </form>
     <p>Обучение происходит при ручной смене аудиодорожки во время просмотра.</p>
     <p>При пустом названии сохраняется индекс дорожки; если порядок в следующей серии отличается, озвучка может оказаться другой.</p>
     <pre id="audioMemoryStatus" style="white-space:pre-wrap"></pre>
   </div></div>
-  <script>
-    (function(){
-      var id='b7a7922e-5271-4d47-87ec-698aa4718c46', page=document.querySelector('#audioMemoryPage');
-      page.addEventListener('viewshow',function(){
-        ApiClient.getPluginConfiguration(id).then(function(c){
-          page.querySelector('#audioMemoryEnable').checked=c.Enable;
-          page.querySelector('#audioMemoryDebug').checked=c.DebugLogging;
-          page.querySelector('#audioMemoryUsers').value=(c.AllowedUserIds||[]).join(', ');
-        });
-        ApiClient.getJSON(ApiClient.getUrl('AudioMemory/Status')).then(function(s){
-          page.querySelector('#audioMemoryStatus').textContent=JSON.stringify({Error:s.Error,Preferences:s.Preferences},null,2);
-        });
-      });
-      page.querySelector('form').addEventListener('submit',function(e){e.preventDefault();
-        ApiClient.getPluginConfiguration(id).then(function(c){
-          c.Enable=page.querySelector('#audioMemoryEnable').checked;
-          c.DebugLogging=page.querySelector('#audioMemoryDebug').checked;
-          c.AllowedUserIds=page.querySelector('#audioMemoryUsers').value.split(',').map(function(x){return x.trim();}).filter(Boolean);
-          return ApiClient.updatePluginConfiguration(id,c);
-        }).then(Dashboard.processPluginConfigurationUpdateResult);
-      });
-    })();
-  </script>
-</div></body></html>
+</div>

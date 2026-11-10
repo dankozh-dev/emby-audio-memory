@@ -155,3 +155,5 @@ dotnet run --project tests/Behavior/Behavior.csproj -c Release
 
 The behaviour harness uses SDK substitutes to exercise lifecycle and failure cases; it does not replace testing on a real Emby server and client.
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the change and validation expectations.
+
+Configuration-controller checks (Node.js 18+): `node --test tests/UI/configuration.test.cjs`.

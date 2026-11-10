@@ -154,3 +154,5 @@ dotnet run --project tests/Behavior/Behavior.csproj -c Release
 
 Проверки поведения используют подмены SDK для воспроизведения обычных сценариев и отказов; они не заменяют проверку на настоящем сервере и в приложении.
 Требования к изменениям описаны в [CONTRIBUTING.md](CONTRIBUTING.md).
+
+Проверки контроллера настроек (Node.js 18+): `node --test tests/UI/configuration.test.cjs`.

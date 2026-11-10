@@ -5,7 +5,7 @@
     <Nullable>enable</Nullable>
     <AssemblyName>Emby.AudioMemory</AssemblyName>
     <RootNamespace>Emby.AudioMemory</RootNamespace>
-    <Version>1.1.0</Version>
+    <Version>1.1.1</Version>
     <Description>Remember audio track choices per user and TV season in Emby Server.</Description>
     <RepositoryUrl>https://github.com/dankozh-dev/emby-audio-memory</RepositoryUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -19,5 +19,6 @@
     <PackageReference Include="MediaBrowser.Server.Core" Version="4.9.1.90" PrivateAssets="all" ExcludeAssets="runtime" />
     <PackageReference Include="System.Memory" Version="4.6.3" PrivateAssets="all" ExcludeAssets="runtime" />
     <EmbeddedResource Include="Configuration.html" />
+    <EmbeddedResource Include="Configuration.js" />
   </ItemGroup>
 </Project>
