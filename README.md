@@ -17,7 +17,7 @@ A real Android client changing tracks and automatically advancing to the next ep
 
 The plugin changes saved audio choices, leaving media files unchanged.
 It sends no playback commands and preserves watched status, resume position, play count, ratings, favourites and subtitle choices when saving an audio selection.
-It skips episodes currently playing in any server session.
+It leaves saved audio selections unchanged for episodes currently playing in any server session.
 
 ### Matching rules
 
@@ -27,7 +27,9 @@ It skips episodes currently playing in any server session.
 | One matching titled track has a different index | Use that track's new index. |
 | Saved track has no title | Reuse its exact Emby stream index if it is an audio track. |
 | No title match, but the track at the saved index is unnamed | Reuse that index. |
-| Several title/language matches, a conflicting non-empty title, or no suitable track | Skip the episode. |
+| Several title/language matches, a conflicting non-empty title, or no suitable track | Leave the saved audio selection unchanged. |
+
+The episode plays normally. When the plugin leaves the selection unchanged, Emby and the client use their normal audio-selection behaviour; the plugin does not reset a previously saved choice to the default track.
 
 Names such as `Studio A`, `Studio A (Dub)` and `Studio A 18+` stay distinct; the plugin does not guess studio aliases.
 **Index fallback cannot identify a dub or verify its language.** It can select different audio when unnamed tracks change order between episodes.
@@ -114,7 +116,7 @@ Rollback is also available while the plugin is disabled.
 Disabling the plugin stops further changes but leaves already saved audio choices in Emby.
 To restore a season, disable the plugin, preview `Rollback` with `DryRun: true`, then repeat with `false`.
 Rollback restores only indexes still owned by the plugin and only when the media source and audio layout match its record.
-It preserves later independent selections and skips active episodes; retry those after playback stops.
+It preserves later independent selections and does not roll back selections for active episodes; retry those after playback stops.
 After any required rollback, stop Emby, remove `Emby.AudioMemory.dll` and start Emby again.
 
 State is stored at `<Emby DataPath>/audio-memory/state.json`.
@@ -127,8 +129,8 @@ Writes record the original index before changing Emby, and state-file errors dis
 - A real Android track-change and queued-next-episode flow remains unverified; a client can override the server's saved choice with a cached index.
 - The client must report `AudioTrackChange`. Selecting a track on an item's details page before playback may not produce that event.
 - Preferences are per user and season, shared by that user's devices. The latest explicit change received wins; preferences do not carry across seasons.
-- Episodes with multiple media sources/versions are skipped. Source or audio-layout changes after a plugin write are also skipped.
-- Named source tracks need a language tag. Ambiguous named matches are skipped; unnamed tracks use the index fallback described above.
+- Saved audio selections remain unchanged for episodes with multiple media sources/versions, or when the source or audio layout changes after a plugin write.
+- Named source tracks need a language tag. Ambiguous named matches leave the audio selection unchanged; unnamed tracks use the index fallback described above.
 - Public Emby APIs save the complete user-data record. Fresh reads, copies and activity checks reduce concurrency risks but are not a server-wide transaction with playback updates.
 - This is an Emby server plugin. **Jellyfin compatibility is not claimed.**
 
