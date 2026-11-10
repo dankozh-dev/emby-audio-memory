@@ -4,7 +4,13 @@
     <p>Запоминает выбранную озвучку отдельно для пользователя и сезона.</p>
     <form id="audioMemoryForm">
       <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="audioMemoryEnable"/><span>Включить</span></label>
-      <div class="inputContainer"><label for="audioMemoryUsers">Идентификаторы пользователей через запятую</label><input is="emby-input" id="audioMemoryUsers"/><div class="fieldDescription">Пустой список отключает запись для всех пользователей.</div></div>
+      <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="audioMemoryAllUsers"/><span>Включить всем пользователям</span></label>
+      <p class="fieldDescription">Включая пользователей, которые будут добавлены позже. У каждого будет свой выбор озвучки.</p>
+      <div id="audioMemorySelectedUsers">
+        <h3>Выберите пользователей</h3>
+        <div id="audioMemoryUsers"></div>
+        <p class="fieldDescription">Если никто не выбран, запоминание отключено для всех.</p>
+      </div>
       <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="audioMemoryDebug"/><span>Подробный журнал событий</span></label>
       <p id="audioMemoryMessage" role="status"></p>
       <button disabled is="emby-button" type="submit" class="raised button-submit block"><span>Сохранить</span></button>

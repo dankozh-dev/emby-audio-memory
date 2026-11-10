@@ -68,7 +68,8 @@ namespace Emby.AudioMemory
 
         private bool Allowed(string userId) => Configuration.Enable &&
             !string.IsNullOrEmpty(TrackMatch.UserKey(userId)) &&
-            (Configuration.AllowedUserIds ?? Array.Empty<string>()).Any(x => TrackMatch.UserKey(x) == TrackMatch.UserKey(userId));
+            (Configuration.EnableForAllUsers ||
+             (Configuration.AllowedUserIds ?? Array.Empty<string>()).Any(x => TrackMatch.UserKey(x) == TrackMatch.UserKey(userId)));
 
         private void EnsureWritable()
         {
@@ -279,7 +280,7 @@ namespace Emby.AudioMemory
 
         public object Status()
         {
-            lock (gate) return new { Enabled = Configuration.Enable, AllowedUserIds = Configuration.AllowedUserIds,
+            lock (gate) return new { Enabled = Configuration.Enable, EnableForAllUsers = Configuration.EnableForAllUsers, AllowedUserIds = Configuration.AllowedUserIds,
                 Error = error, StatePath = statePath,
                 Preferences = json.DeserializeFromString<List<Preference>>(json.SerializeToString(state.Preferences)),
                 Backups = json.DeserializeFromString<List<Backup>>(json.SerializeToString(state.Backups)), RecentEvents = events.ToArray() };

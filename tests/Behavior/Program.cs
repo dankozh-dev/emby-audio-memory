@@ -15,6 +15,19 @@ State State(Fixture f)=>JsonSerializer.Deserialize<State>(File.ReadAllText(Path.
 string Rest(UserItemData d){var copy=JsonSerializer.Deserialize<UserItemData>(JsonSerializer.Serialize(d))!;copy.AudioStreamIndex=null;return JsonSerializer.Serialize(copy);}
 
 using(var f=new Fixture()) {
+ bool denied=false;try{f.P.Seed(f.U2.Id.ToString(),f.E1.InternalId,6,false);}catch(InvalidOperationException){denied=true;}
+ Check(denied&&f.Data.Saves==0,"legacy config keeps unselected users excluded");
+ f.P.Configuration.EnableForAllUsers=true;
+ f.P.Seed(f.U2.Id.ToString(),f.E1.InternalId,6,false);
+ Check(Audio(f,f.U2,f.E2)==3&&Audio(f,f.U1,f.E2)==null,"all-users mode learns independently for a user outside the list");
+ f.P.Configuration.EnableForAllUsers=false;
+ var late=Fixture.Ep(106,f.Season,4);f.Lib.Items.Add(late);f.P.Reconcile(false);
+ Check(Audio(f,f.U2,late)==null,"switching back to selected users stops reconciliation for excluded users");
+ f.P.Configuration.EnableForAllUsers=true;f.P.Configuration.Enable=false;
+ denied=false;try{f.P.Seed(f.U2.Id.ToString(),f.E1.InternalId,6,false);}catch(InvalidOperationException){denied=true;}
+ Check(denied,"master switch disables all-users mode");
+}
+using(var f=new Fixture()) {
  var original=f.Data.GetUserData(f.U1,f.E2); original.Played=true;original.PlayCount=7;original.PlaybackPositionTicks=987654321;original.LastPlayedDate=DateTime.Parse("2025-06-01T11:00:00Z");original.SubtitleStreamIndex=9;original.IsFavorite=true;original.Rating=8;original.HideFromResume=true;original.Key="key";original.RatingLastModified=DateTime.UtcNow;original.PlaystateLastModified=DateTime.UtcNow;original.DateLastSearched=DateTime.UtcNow;
  var rest=Rest(original);
  f.P.Seed(f.U1.Id.ToString(),f.E1.InternalId,6,true);

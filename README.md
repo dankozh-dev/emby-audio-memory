@@ -41,34 +41,24 @@ Emby's stream index is the `Index` in media metadata, not the position in an aud
 2. Compare the DLL's SHA-256 hash with `SHA256SUMS`.
 3. Stop Emby Server and copy the DLL into its `plugins` directory. For an update, move the previous DLL out of that directory first.
 4. Start Emby Server and open **Dashboard → Plugins → Audio Memory**.
-5. Add the intended users' public IDs, enable the plugin and save.
+5. Enable the plugin, select users by name or turn on **Включить всем пользователям** (Enable for all users), and save.
 6. For each intended user, enable Emby's **Remember audio track selection** playback setting.
 7. Start an episode and manually switch to the desired track during playback.
 
 The plugin starts **disabled**, with an **empty user allowlist**.
-An empty allowlist enables no users; it does not mean “everyone”.
-The current configuration page uses Russian labels: **Включить** = Enable, **Идентификаторы пользователей через запятую** = comma-separated user IDs, **Сохранить** = Save.
+With all-users mode off, an empty selection enables no users.
+The current configuration page uses Russian labels: **Включить** = Enable, **Включить всем пользователям** = Enable for all users, **Сохранить** = Save.
 
 Copy only the plugin DLL, not Emby SDK assemblies or build dependencies.
 Use the server's persistent plugin directory; Docker installations need the corresponding persistent volume.
 See Emby's [manual plugin installation instructions](https://emby.media/support/articles/Plugins.html) for locating the directory and setting permissions.
 
-### Find the user IDs
+### Choose users
 
-Use an administrator token to call `GET /Users` on your own server's API.
-For example, with `EMBY_ADMIN_TOKEN` already set in your shell:
-
-```sh
-EMBY_API_URL='https://emby.example.org/emby'
-curl --fail --silent --show-error \
-  --header "X-Emby-Token: $EMBY_ADMIN_TOKEN" \
-  "$EMBY_API_URL/Users"
-```
-
-Find the intended account by `Name` and copy its `Id` into the plugin configuration.
-Use the public GUID returned by the API, not the display name, an internal numeric user ID or an Emby Connect account ID.
-GUIDs with or without hyphens are accepted.
-Adjust the API base URL for your reverse proxy; do not put tokens in URLs or issue reports.
+The settings page loads account names from Emby and shows a checkbox for each user. No manual IDs are needed.
+All-users mode includes accounts added later; audio preferences remain separate for each account.
+Switching back restores the selected subset. Existing installations keep their selection and do not enable everyone automatically.
+For the optional admin API below, obtain public user GUIDs from authenticated `GET /Users`.
 
 ## Check that it works
 

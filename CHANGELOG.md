@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.0 — User selection
+
+- Replace manual user IDs with named account checkboxes loaded from Emby.
+- Add an explicit all-users mode, including future accounts, while keeping preferences separate per user.
+- Preserve existing selections on upgrade and when switching between modes.
+- Prevent saving when the user list cannot be loaded; render names as text.
+
 ## 1.1.1 — Configuration page fix
 
 - Use the Emby 4.10 view/controller format so the dashboard can open Audio Memory settings.

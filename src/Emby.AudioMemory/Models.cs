@@ -10,6 +10,7 @@ namespace Emby.AudioMemory
     public sealed class Configuration : BasePluginConfiguration
     {
         public bool Enable { get; set; }
+        public bool EnableForAllUsers { get; set; }
         public string[] AllowedUserIds { get; set; } = Array.Empty<string>();
         public bool DebugLogging { get; set; }
     }
